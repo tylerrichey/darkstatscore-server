@@ -93,27 +93,33 @@ func handleCapture(deviceName string) {
 	} else if err := handle.SetBPFFilter("not (src net " + localNetwork + " and dst net " + localNetwork + ")"); err != nil { // optional
 		panic(err)
 	} else {
-		packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-		for packet := range packetSource.Packets() {
-			handlePacket(packet)
-		}
-	}
-}
+		var eth layers.Ethernet
+		var ip4 layers.IPv4
+		var tcp layers.TCP
+		var udp layers.UDP
+		parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip4, &tcp, &udp)
+		decoded := []gopacket.LayerType{}
 
-func handlePacket(packet gopacket.Packet) {
-	var n NetworkData
-	var host string
-	var ci = packet.Metadata().CaptureInfo
-	n.LastSeen = ci.Timestamp
-	if ethLayer := packet.Layer(layers.LayerTypeEthernet); ethLayer != nil {
-		eth, _ := ethLayer.(*layers.Ethernet)
-		var dstMac = eth.DstMAC.String()
-		var srcMac = eth.SrcMAC.String()
-
-		if ipLayer := packet.Layer(layers.LayerTypeIPv4); ipLayer != nil {
-			ip, _ := ipLayer.(*layers.IPv4)
-			var srcIP = ip.SrcIP.String()
-			var dstIP = ip.DstIP.String()
+		for {
+			packetData, ci, _ := handle.ZeroCopyReadPacketData()
+			parser.DecodeLayers(packetData, &decoded)
+			var n NetworkData
+			var host string
+			var srcIP string
+			var dstIP string
+			var srcMac string
+			var dstMac string
+			n.LastSeen = ci.Timestamp
+			for _, layer := range decoded {
+				switch layer {
+				case layers.LayerTypeIPv4:
+					srcIP = ip4.SrcIP.String()
+					dstIP = ip4.DstIP.String()
+				case layers.LayerTypeEthernet:
+					srcMac = eth.SrcMAC.String()
+					dstMac = eth.DstMAC.String()
+				}
+			}
 			if strings.HasPrefix(dstIP, localNetwork) {
 				host = dstIP
 				n.Mac = dstMac
@@ -124,17 +130,63 @@ func handlePacket(packet gopacket.Packet) {
 				n.Out = ci.Length
 			}
 
-			hosts.Upsert(host, n, func(exists bool, valueInMap interface{}, newValue interface{}) interface{} {
-				nv := newValue.(NetworkData)
-				if !exists {
-					return nv
-				}
-				res := valueInMap.(NetworkData)
-				res.In += nv.In
-				res.Out += nv.Out
-				res.LastSeen = nv.LastSeen
-				return res
-			})
+			if len(host) > 0 {
+				hosts.Upsert(host, n, func(exists bool, valueInMap interface{}, newValue interface{}) interface{} {
+					nv := newValue.(NetworkData)
+					if !exists {
+						return nv
+					}
+					res := valueInMap.(NetworkData)
+					res.In += nv.In
+					res.Out += nv.Out
+					res.LastSeen = nv.LastSeen
+					return res
+				})
+			}
 		}
+
+		// packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
+		// for packet := range packetSource.Packets() {
+		// 	handlePacket(packet)
+		// }
 	}
 }
+
+// func handlePacket(packet gopacket.Packet) {
+// 	var n NetworkData
+// 	var host string
+// 	var ci = packet.Metadata().CaptureInfo
+// 	n.LastSeen = ci.Timestamp
+// 	if ethLayer := packet.Layer(layers.LayerTypeEthernet); ethLayer != nil {
+// 		eth, _ := ethLayer.(*layers.Ethernet)
+// 		var dstMac = eth.DstMAC.String()
+// 		var srcMac = eth.SrcMAC.String()
+
+// 		if ipLayer := packet.Layer(layers.LayerTypeIPv4); ipLayer != nil {
+// 			ip, _ := ipLayer.(*layers.IPv4)
+// 			var srcIP = ip.SrcIP.String()
+// 			var dstIP = ip.DstIP.String()
+// 			if strings.HasPrefix(dstIP, localNetwork) {
+// 				host = dstIP
+// 				n.Mac = dstMac
+// 				n.In = ci.Length
+// 			} else {
+// 				host = srcIP
+// 				n.Mac = srcMac
+// 				n.Out = ci.Length
+// 			}
+
+// 			hosts.Upsert(host, n, func(exists bool, valueInMap interface{}, newValue interface{}) interface{} {
+// 				nv := newValue.(NetworkData)
+// 				if !exists {
+// 					return nv
+// 				}
+// 				res := valueInMap.(NetworkData)
+// 				res.In += nv.In
+// 				res.Out += nv.Out
+// 				res.LastSeen = nv.LastSeen
+// 				return res
+// 			})
+// 		}
+// 	}
+// }
