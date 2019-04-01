@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net"
 	"strconv"
@@ -24,55 +25,62 @@ type NetworkData struct {
 	LastSeen time.Time
 }
 
-const localNetwork string = "10.0.0"
-
 var hosts = cmap.New()
+var localNetwork = ""
 
 func main() {
-	// if ifs, err := pcap.FindAllDevs(); err != nil {
-	// 	fmt.Print(err)
-	// } else {
-	// 	for _, nif := range ifs {
-	// 		fmt.Println(nif.Name)
-	// 		for _, net := range nif.Addresses {
-	// 			fmt.Println(">", net.IP, "/", net.Netmask)
-	// 		}
-	// 	}
-	// }
-
-	for {
-		secondsToWait := 30
-		fmt.Println("Listening for connections...")
-		ln, _ := net.Listen("tcp4", ":62231")
-		if conn, err := ln.Accept(); err != nil {
-			fmt.Println(err.Error())
+	deviceName := flag.String("device", "", "Name of device to capture on. If not provided, lists available devices.")
+	listenInfo := flag.String("listen", ":62231", "ip:port to listen on, IP optional")
+	localNet := flag.String("localnet", "10.0.0", "First three octets of local network, i.e.: 192.168.1")
+	flag.Parse()
+	if len(*deviceName) == 0 {
+		fmt.Println("No device name given; showing available devices:")
+		if ifs, err := pcap.FindAllDevs(); err != nil {
+			fmt.Println(err)
 		} else {
-			fmt.Println("Connection accepted.")
-			go handleCapture("\\Device\\NPF_{B841A3AF-0477-4D68-8DBC-FD17EA333A98}")
+			for _, nif := range ifs {
+				fmt.Println(nif.Name)
+				for _, net := range nif.Addresses {
+					fmt.Println(">", net.IP, "/", net.Netmask)
+				}
+			}
+		}
+	} else {
+		for {
+			secondsToWait := 30
+			localNetwork = *localNet
+			fmt.Println("Listening for connections...")
+			ln, _ := net.Listen("tcp4", *listenInfo)
+			if conn, err := ln.Accept(); err != nil {
+				fmt.Println(err.Error())
+			} else {
+				fmt.Println("Connection accepted.")
+				go handleCapture(*deviceName)
 
-			for {
-				conn.SetReadDeadline(time.Now().Add(time.Duration(secondsToWait) * time.Second))
-				msg, _ := bufio.NewReader(conn).ReadString('\n')
-				if len(msg) > 0 {
-					if input, err := strconv.ParseInt(strings.ReplaceAll(msg, "\n", ""), 0, 32); err == nil && input > 0 {
-						secondsToWait = int(input)
-					} else if err != nil {
+				for {
+					conn.SetReadDeadline(time.Now().Add(time.Duration(secondsToWait) * time.Second))
+					msg, _ := bufio.NewReader(conn).ReadString('\n')
+					if len(msg) > 0 {
+						if input, err := strconv.ParseInt(strings.ReplaceAll(msg, "\n", ""), 0, 32); err == nil && input > 0 {
+							secondsToWait = int(input)
+						} else if err != nil {
+							fmt.Println(err.Error())
+						}
+						fmt.Println("Update frequency: " + strconv.Itoa(secondsToWait))
+						continue
+					}
+					m := make(map[string]NetworkData)
+					for _, k := range hosts.Keys() {
+						h, exists := hosts.Pop(k)
+						if exists {
+							m[k] = h.(NetworkData)
+						}
+					}
+					b, _ := json.Marshal(m)
+					if _, err := conn.Write(b); err != nil {
 						fmt.Println(err.Error())
+						break
 					}
-					fmt.Println("Update frequency: " + strconv.Itoa(secondsToWait))
-					continue
-				}
-				m := make(map[string]NetworkData)
-				for _, k := range hosts.Keys() {
-					h, exists := hosts.Pop(k)
-					if exists {
-						m[k] = h.(NetworkData)
-					}
-				}
-				b, _ := json.Marshal(m)
-				if _, err := conn.Write(b); err != nil {
-					fmt.Println(err.Error())
-					break
 				}
 			}
 		}
