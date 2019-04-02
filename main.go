@@ -15,6 +15,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	"github.com/pkg/profile"
 )
 
 // NetworkData struct to hold captured network data
@@ -33,6 +34,7 @@ func main() {
 	listenInfo := flag.String("listen", ":62231", "ip:port to listen on, IP optional")
 	localNet := flag.String("localnet", "10.0.0", "First three octets of local network, i.e.: 192.168.1")
 	flag.Parse()
+	defer profile.Start().Stop()
 	if len(*deviceName) == 0 {
 		fmt.Println("No device name given; showing available devices:")
 		if ifs, err := pcap.FindAllDevs(); err != nil {
