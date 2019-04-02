@@ -95,6 +95,7 @@ func handleCapture(deviceName string) {
 	} else if err := handle.SetBPFFilter("not (src net " + localNetwork + " and dst net " + localNetwork + ")"); err != nil { // optional
 		panic(err)
 	} else {
+		defer handle.Close()
 		var (
 			eth    layers.Ethernet
 			ip4    layers.IPv4
