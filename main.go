@@ -33,8 +33,11 @@ func main() {
 	deviceName := flag.String("device", "", "Name of device to capture on. If not provided, lists available devices.")
 	listenInfo := flag.String("listen", ":62231", "ip:port to listen on, IP optional")
 	localNet := flag.String("localnet", "10.0.0", "First three octets of local network, i.e.: 192.168.1")
+	doProfile := flag.Bool("profile", false, "Turn on golang profiling")
 	flag.Parse()
-	defer profile.Start(profile.MemProfile).Stop()
+	if *doProfile {
+		defer profile.Start(profile.MemProfile).Stop()
+	}
 	if len(*deviceName) == 0 {
 		fmt.Println("No device name given; showing available devices:")
 		if ifs, err := pcap.FindAllDevs(); err != nil {
@@ -49,40 +52,46 @@ func main() {
 		}
 	} else {
 		for {
-			secondsToWait := 30
+			secondsToWait := 10
 			localNetwork = *localNet
 			fmt.Println("Listening for connections...")
-			ln, _ := net.Listen("tcp4", *listenInfo)
-			if conn, err := ln.Accept(); err != nil {
+			if ln, err := net.Listen("tcp4", *listenInfo); err != nil {
 				fmt.Println(err.Error())
 			} else {
-				fmt.Println("Connection accepted.")
-				go handleCapture(*deviceName)
+				if conn, err := ln.Accept(); err != nil {
+					fmt.Println(err.Error())
+				} else {
+					fmt.Println("Connection accepted.")
+					go handleCapture(*deviceName)
+					// var lastCaptureSent = time.Now()
 
-				for {
-					conn.SetReadDeadline(time.Now().Add(time.Duration(secondsToWait) * time.Second))
-					msg, _ := bufio.NewReader(conn).ReadString('\n')
-					if len(msg) > 0 {
-						if input, err := strconv.ParseInt(strings.ReplaceAll(msg, "\n", ""), 0, 32); err == nil && input > 0 {
-							secondsToWait = int(input)
-						} else if err != nil {
+					for {
+						conn.SetReadDeadline(time.Now().Add(time.Duration(secondsToWait) * time.Second))
+						msg, _ := bufio.NewReader(conn).ReadString('\n')
+						if len(msg) > 0 {
+							if input, err := strconv.ParseInt(strings.ReplaceAll(msg, "\n", ""), 0, 32); err == nil && input > 0 {
+								secondsToWait = int(input)
+							} else if err != nil {
+								fmt.Println(err.Error())
+							}
+							fmt.Println("Update frequency: " + strconv.Itoa(secondsToWait))
+							// conn.Write([]byte(lastCaptureSent.Format(time.RFC3339)))
+						}
+						m := make(map[string]NetworkData, len(hosts.Keys()))
+						for _, k := range hosts.Keys() {
+							h, exists := hosts.Pop(k)
+							if exists {
+								m[k] = h.(NetworkData)
+							}
+						}
+						b, _ := json.Marshal(&m)
+						if _, err := conn.Write(b); err != nil {
 							fmt.Println(err.Error())
+							break
 						}
-						fmt.Println("Update frequency: " + strconv.Itoa(secondsToWait))
-						continue
+						// lastCaptureSent = time.Now()
 					}
-					m := make(map[string]NetworkData, len(hosts.Keys()))
-					for _, k := range hosts.Keys() {
-						h, exists := hosts.Pop(k)
-						if exists {
-							m[k] = h.(NetworkData)
-						}
-					}
-					b, _ := json.Marshal(&m)
-					if _, err := conn.Write(b); err != nil {
-						fmt.Println(err.Error())
-						break
-					}
+					ln.Close()
 				}
 			}
 		}
@@ -92,15 +101,12 @@ func main() {
 func handleCapture(deviceName string) {
 	if handle, err := pcap.OpenLive(deviceName, 1600, true, pcap.BlockForever); err != nil {
 		panic(err)
-	} else if err := handle.SetBPFFilter("not (src net " + localNetwork + " and dst net " + localNetwork + ")"); err != nil { // optional
+	} else if err := handle.SetBPFFilter("not (src net " + localNetwork + " and dst net " + localNetwork + ")"); err != nil {
 		panic(err)
 	} else {
-		defer handle.Close()
 		var (
 			eth    layers.Ethernet
 			ip4    layers.IPv4
-			tcp    layers.TCP
-			udp    layers.UDP
 			n      NetworkData
 			host   string
 			srcIP  string
@@ -108,7 +114,7 @@ func handleCapture(deviceName string) {
 			srcMac string
 			dstMac string
 		)
-		parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip4, &tcp, &udp)
+		parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip4)
 		decoded := []gopacket.LayerType{}
 
 		for {
@@ -130,11 +136,11 @@ func handleCapture(deviceName string) {
 			if strings.HasPrefix(dstIP, localNetwork) {
 				host = dstIP
 				n.Mac = dstMac
-				n.In = ci.Length
+				n.In = ci.Length / 8
 			} else {
 				host = srcIP
 				n.Mac = srcMac
-				n.Out = ci.Length
+				n.Out = ci.Length / 8
 			}
 
 			if len(host) > 0 {
