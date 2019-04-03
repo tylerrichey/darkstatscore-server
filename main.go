@@ -136,11 +136,11 @@ func handleCapture(deviceName string) {
 			if strings.HasPrefix(dstIP, localNetwork) {
 				host = dstIP
 				n.Mac = dstMac
-				n.In = ci.Length / 8
+				n.In = ci.Length
 			} else {
 				host = srcIP
 				n.Mac = srcMac
-				n.Out = ci.Length / 8
+				n.Out = ci.Length
 			}
 
 			if len(host) > 0 {
