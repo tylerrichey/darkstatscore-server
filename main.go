@@ -75,6 +75,7 @@ func main() {
 								fmt.Println(err.Error())
 							}
 							fmt.Println("Update frequency: " + strconv.Itoa(secondsToWait))
+							continue
 							// conn.Write([]byte(lastCaptureSent.Format(time.RFC3339)))
 						}
 						m := make(map[string]NetworkData, len(hosts.Keys()))
