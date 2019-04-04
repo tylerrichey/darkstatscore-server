@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"strconv"
 	"strings"
 	"time"
@@ -15,7 +17,6 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
-	"github.com/pkg/profile"
 )
 
 // NetworkData struct to hold captured network data
@@ -33,11 +34,15 @@ func main() {
 	deviceName := flag.String("device", "", "Name of device to capture on. If not provided, lists available devices.")
 	listenInfo := flag.String("listen", ":62231", "ip:port to listen on, IP optional")
 	localNet := flag.String("localnet", "10.0.0", "First three octets of local network, i.e.: 192.168.1")
-	doProfile := flag.Bool("profile", false, "Turn on golang profiling")
+	doProfile := flag.Bool("doprof", false, "Enable golang profiling via web interface")
+	profileListen := flag.String("proflisten", "localhost:6060", "Profiling web service at specified ip:port")
 	flag.Parse()
 	if *doProfile {
-		defer profile.Start(profile.MemProfile).Stop()
+		go func() {
+			fmt.Println(http.ListenAndServe(*profileListen, nil))
+		}()
 	}
+
 	if len(*deviceName) == 0 {
 		fmt.Println("No device name given; showing available devices:")
 		if ifs, err := pcap.FindAllDevs(); err != nil {
