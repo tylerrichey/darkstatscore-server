@@ -105,7 +105,7 @@ func main() {
 }
 
 func handleCapture(deviceName string) {
-	if handle, err := pcap.OpenLive(deviceName, 1600, true, pcap.BlockForever); err != nil {
+	if handle, err := pcap.OpenLive(deviceName, 96, true, pcap.BlockForever); err != nil {
 		panic(err)
 	} else if err := handle.SetBPFFilter("not (src net " + localNetwork + " and dst net " + localNetwork + ")"); err != nil {
 		panic(err)
