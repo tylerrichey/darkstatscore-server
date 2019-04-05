@@ -67,7 +67,8 @@ func main() {
 					fmt.Println(err.Error())
 				} else {
 					fmt.Println("Connection accepted.")
-					go handleCapture(*deviceName)
+					handle := initHandle(*deviceName)
+					go processPackets(handle)
 					// var lastCaptureSent = time.Now()
 
 					for {
@@ -104,7 +105,7 @@ func main() {
 	}
 }
 
-func handleCapture(deviceName string) {
+func initHandle(deviceName string) (handle *pcap.Handle) {
 	if inactiveHandle, err := pcap.NewInactiveHandle(deviceName); err != nil {
 		panic(err)
 	} else {
@@ -116,7 +117,7 @@ func handleCapture(deviceName string) {
 			panic(err)
 		} else {
 			handle.SetBPFFilter("not (src net " + localNetwork + " and dst net " + localNetwork + ")")
-			processPackets(handle)
+			return handle
 		}
 	}
 }
