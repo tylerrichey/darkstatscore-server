@@ -110,7 +110,8 @@ func initHandle(deviceName string) (handle *pcap.Handle) {
 		panic(err)
 	} else {
 		defer inactiveHandle.CleanUp()
-		inactiveHandle.SetImmediateMode(true)
+		// inactiveHandle.SetImmediateMode(true)
+		inactiveHandle.SetTimeout(pcap.BlockForever)
 		inactiveHandle.SetPromisc(true)
 		inactiveHandle.SetSnapLen(96)
 		if handle, err := inactiveHandle.Activate(); err != nil {
