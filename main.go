@@ -23,8 +23,8 @@ import (
 type NetworkData struct {
 	In       int
 	Out      int
-	Mac      string
 	LastSeen time.Time
+	Mac      Mac
 }
 
 var hosts = cmap.New()
@@ -122,22 +122,13 @@ func initHandle(deviceName string) (handle *pcap.Handle) {
 	}
 }
 
-// if handle, err := pcap.OpenLive(deviceName, 96, true, pcap.BlockForever); err != nil {
-// 	panic(err)
-// } else if err := handle.SetBPFFilter("not (src net " + localNetwork + " and dst net " + localNetwork + ")"); err != nil {
-// 	panic(err)
-// } else {
-
 func processPackets(handle *pcap.Handle) {
 	var (
-		eth    layers.Ethernet
-		ip4    layers.IPv4
-		n      NetworkData
-		host   string
-		srcIP  string
-		dstIP  string
-		srcMac string
-		dstMac string
+		eth   layers.Ethernet
+		ip4   layers.IPv4
+		n     NetworkData
+		host  string
+		dstIP string
 	)
 	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip4)
 	decoded := []gopacket.LayerType{}
@@ -145,27 +136,17 @@ func processPackets(handle *pcap.Handle) {
 	for {
 		packetData, ci, _ := handle.ZeroCopyReadPacketData()
 		parser.DecodeLayers(packetData, &decoded)
-
 		host = ""
 		n.LastSeen = ci.Timestamp
-		for _, layer := range decoded {
-			switch layer {
-			case layers.LayerTypeIPv4:
-				srcIP = ip4.SrcIP.String()
-				dstIP = ip4.DstIP.String()
-			case layers.LayerTypeEthernet:
-				srcMac = eth.SrcMAC.String()
-				dstMac = eth.DstMAC.String()
-			}
-		}
+		dstIP = ip4.DstIP.String()
 		if strings.HasPrefix(dstIP, localNetwork) {
 			host = dstIP
-			n.Mac = dstMac
+			n.Mac = Mac{eth.DstMAC}
 			n.In = ci.Length
 			n.Out = 0
 		} else {
-			host = srcIP
-			n.Mac = srcMac
+			host = ip4.SrcIP.String()
+			n.Mac = Mac{eth.SrcMAC}
 			n.Out = ci.Length
 			n.In = 0
 		}
@@ -184,4 +165,14 @@ func processPackets(handle *pcap.Handle) {
 			})
 		}
 	}
+}
+
+// MarshalJSON for hardwareaddr
+func (m Mac) MarshalJSON() ([]byte, error) {
+	return json.Marshal(m.HardwareAddr.String())
+}
+
+// Mac used to avoid string allocs
+type Mac struct {
+	net.HardwareAddr
 }
