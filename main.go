@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	_ "net/http/pprof"
-	"strconv"
 	"strings"
 	"time"
 
@@ -56,9 +55,11 @@ func main() {
 			}
 		}
 	} else {
+		localNetwork = *localNet
+		handle := initHandle(*deviceName)
+		go processPackets(handle)
+
 		for {
-			secondsToWait := 10
-			localNetwork = *localNet
 			fmt.Println("Listening for connections...")
 			if ln, err := net.Listen("tcp4", *listenInfo); err != nil {
 				fmt.Println(err.Error())
@@ -67,23 +68,10 @@ func main() {
 					fmt.Println(err.Error())
 				} else {
 					fmt.Println("Connection accepted.")
-					handle := initHandle(*deviceName)
-					go processPackets(handle)
 					// var lastCaptureSent = time.Now()
 
 					for {
-						conn.SetReadDeadline(time.Now().Add(time.Duration(secondsToWait) * time.Second))
-						msg, _ := bufio.NewReader(conn).ReadString('\n')
-						if len(msg) > 0 {
-							if input, err := strconv.ParseInt(strings.ReplaceAll(msg, "\n", ""), 0, 32); err == nil && input > 0 {
-								secondsToWait = int(input)
-							} else if err != nil {
-								fmt.Println(err.Error())
-							}
-							fmt.Println("Update frequency: " + strconv.Itoa(secondsToWait))
-							continue
-							// conn.Write([]byte(lastCaptureSent.Format(time.RFC3339)))
-						}
+						bufio.NewReader(conn).ReadString('\n')
 						m := make(map[string]NetworkData, len(hosts.Keys()))
 						for _, k := range hosts.Keys() {
 							h, exists := hosts.Pop(k)
@@ -110,8 +98,8 @@ func initHandle(deviceName string) (handle *pcap.Handle) {
 		panic(err)
 	} else {
 		defer inactiveHandle.CleanUp()
-		// inactiveHandle.SetImmediateMode(true)
-		inactiveHandle.SetTimeout(pcap.BlockForever)
+		inactiveHandle.SetImmediateMode(true)
+		// inactiveHandle.SetTimeout(pcap.BlockForever)
 		inactiveHandle.SetPromisc(true)
 		inactiveHandle.SetSnapLen(96)
 		if handle, err := inactiveHandle.Activate(); err != nil {
