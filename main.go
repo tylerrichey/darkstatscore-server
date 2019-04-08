@@ -2,13 +2,13 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
-	"strings"
 	"time"
 
 	cmap "github.com/orcaman/concurrent-map"
@@ -99,7 +99,6 @@ func initHandle(deviceName string) (handle *pcap.Handle) {
 	} else {
 		defer inactiveHandle.CleanUp()
 		inactiveHandle.SetImmediateMode(true)
-		// inactiveHandle.SetTimeout(pcap.BlockForever)
 		inactiveHandle.SetPromisc(true)
 		inactiveHandle.SetSnapLen(96)
 		if handle, err := inactiveHandle.Activate(); err != nil {
@@ -113,12 +112,13 @@ func initHandle(deviceName string) (handle *pcap.Handle) {
 
 func processPackets(handle *pcap.Handle) {
 	var (
-		eth   layers.Ethernet
-		ip4   layers.IPv4
-		n     NetworkData
-		host  string
-		dstIP string
+		eth  layers.Ethernet
+		ip4  layers.IPv4
+		n    NetworkData
+		host string
 	)
+	startingIP := net.ParseIP(localNetwork + ".1").To4()
+	endingIP := net.ParseIP(localNetwork + ".255").To4()
 	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip4)
 	decoded := []gopacket.LayerType{}
 
@@ -127,9 +127,8 @@ func processPackets(handle *pcap.Handle) {
 		parser.DecodeLayers(packetData, &decoded)
 		host = ""
 		n.LastSeen = ci.Timestamp
-		dstIP = ip4.DstIP.String()
-		if strings.HasPrefix(dstIP, localNetwork) {
-			host = dstIP
+		if ipIsBetween(startingIP, endingIP, ip4.DstIP) {
+			host = ip4.DstIP.String()
 			n.Mac = Mac{eth.DstMAC}
 			n.In = ci.Length
 			n.Out = 0
@@ -154,6 +153,10 @@ func processPackets(handle *pcap.Handle) {
 			})
 		}
 	}
+}
+
+func ipIsBetween(begin net.IP, end net.IP, trial net.IP) bool {
+	return bytes.Compare(trial, begin) >= 0 && bytes.Compare(trial, end) <= 0
 }
 
 // MarshalJSON for hardwareaddr
