@@ -68,7 +68,6 @@ func main() {
 					fmt.Println(err.Error())
 				} else {
 					fmt.Println("Connection accepted.")
-					// var lastCaptureSent = time.Now()
 
 					for {
 						bufio.NewReader(conn).ReadString('\n')
@@ -84,7 +83,6 @@ func main() {
 							fmt.Println(err.Error())
 							break
 						}
-						// lastCaptureSent = time.Now()
 					}
 					ln.Close()
 				}

@@ -1,0 +1,73 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          darkstatscore-server
+# Required-Start: $remote_fs $network
+# Required-Stop:  $remote_fs 
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: start darkstatscore-server
+### END INIT INFO
+
+set -e
+
+. /lib/lsb/init-functions
+
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+DAEMON="/usr/sbin/darkstatscore-server"
+NAME="darkstatscore-server"
+DESC="darkstatscore-server network daemon"
+PIDFILE="/var/run/$NAME.pid"
+
+test -f $DAEMON || exit 0
+
+case "$1" in
+start)
+  log_begin_msg "Starting $DESC : $NAME "
+  if start-stop-daemon --start --quiet -b --exec $DAEMON -- \
+      -device switch0 -listen 10.0.0.1:62231  -doprof -proflisten 10.0.0.1:6060; then
+      log_success_msg "done"
+  else
+      log_progress_msg "already running"
+  fi
+  log_end_msg 0
+  ;;
+stop)
+  log_begin_msg "Stopping $DESC : $NAME... "
+  if [ ! -f "$PIDFILE" ] ; then
+	  log_progress_msg "not running"
+  else
+      if start-stop-daemon --quiet --oknodo --stop --name $NAME --pidfile $PIDFILE --retry 30; then
+           rm -f $PIDFILE
+	   log_success_msg "stopped"
+      else
+           log_progress_msg "not running"
+      fi
+  fi
+  log_end_msg 0
+  ;;
+restart | force-reload)
+  log_begin_msg "Restarting $DESC : $NAME "
+  if [ ! -f "$PIDFILE" ] ; then 
+     log_progress_msg "not running " 
+  else
+     if start-stop-daemon --stop --oknodo --name $NAME --pidfile $PIDFILE --retry 30; then
+          rm -f $PIDFILE
+      else
+         log_progress_msg "$DESC : $NAME is not running"
+         rm -f $PIDFILE
+     fi
+  fi
+  sleep 1
+  start-stop-daemon --start --quiet -b --exec $DAEMON -- \
+      -device switch0 -listen 10.0.0.1:62231  -doprof -proflisten 10.0.0.1:6060
+  log_success_msg "done"  
+  log_end_msg 0
+  ;;
+*)
+  N=/etc/init.d/$NAME
+   log_success_msg "Usage: $N {start|stop|restart|force-reload}" >&2
+  exit 1
+  ;;
+esac
+
+exit 0
