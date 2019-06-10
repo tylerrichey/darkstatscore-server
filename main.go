@@ -114,7 +114,7 @@ func initAfPacket(deviceName string) (handle *afpacket.TPacket) {
 		filter, _ := pcap.CompileBPFFilter(layers.LinkTypeEthernet, 96, "not (src net "+localNetwork+" and dst net "+localNetwork+")")
 		raw := bpfutils.ToBpfRawInstructions(filter)
 		handle.SetBPF(raw)
-		handle.SetFanout(afpacket.FanoutCPU, 4)
+		handle.SetFanout(afpacket.FanoutLoadBalance, 4)
 		return handle
 	}
 }
