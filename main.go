@@ -108,13 +108,13 @@ func initAfPacket(deviceName string) (handle *afpacket.TPacket) {
 		afpacket.OptNumBlocks(682),
 		afpacket.OptPollTimeout(pcap.BlockForever),
 		afpacket.SocketRaw,
-		afpacket.TPacketVersionHighestAvailable); err != nil {
+		afpacket.TPacketVersion3); err != nil {
 		panic(err)
 	} else {
 		filter, _ := pcap.CompileBPFFilter(layers.LinkTypeEthernet, 96, "not (src net "+localNetwork+" and dst net "+localNetwork+")")
 		raw := bpfutils.ToBpfRawInstructions(filter)
 		handle.SetBPF(raw)
-		handle.SetFanout(afpacket.FanoutLoadBalance, 4)
+		handle.SetFanout(afpacket.FanoutHashWithDefrag, 4)
 		return handle
 	}
 }
