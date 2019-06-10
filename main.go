@@ -14,6 +14,7 @@ import (
 	cmap "github.com/orcaman/concurrent-map"
 
 	"github.com/google/gopacket"
+	"github.com/google/gopacket/afpacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 )
@@ -89,6 +90,15 @@ func main() {
 			}
 		}
 	}
+}
+
+func initAfPacket(deviceName string) (handle *afpacket.TPacket) {
+	handle, _ = afpacket.NewTPacket(
+		afpacket.OptInterface(deviceName),
+		afpacket.OptFrameSize(96)
+	)
+	
+	handle.SetBPFFilter("not (src net " + localNetwork + " and dst net " + localNetwork + ")")
 }
 
 func initHandle(deviceName string) (handle *pcap.Handle) {
