@@ -60,7 +60,13 @@ func main() {
 		localNetwork = *localNet
 		// handle := initHandle(*deviceName)
 		afHandle := initAfPacket(*deviceName)
+		afHandle2 := initAfPacket(*deviceName)
+		afHandle3 := initAfPacket(*deviceName)
+		afHandle4 := initAfPacket(*deviceName)
 		go processPackets(afHandle)
+		go processPackets(afHandle2)
+		go processPackets(afHandle3)
+		go processPackets(afHandle4)
 
 		for {
 			fmt.Println("Listening for connections...")
@@ -108,6 +114,7 @@ func initAfPacket(deviceName string) (handle *afpacket.TPacket) {
 		filter, _ := pcap.CompileBPFFilter(layers.LinkTypeEthernet, 96, "not (src net "+localNetwork+" and dst net "+localNetwork+")")
 		raw := bpfutils.ToBpfRawInstructions(filter)
 		handle.SetBPF(raw)
+		handle.SetFanout(afpacket.FanoutCPU, 4)
 		return handle
 	}
 }
