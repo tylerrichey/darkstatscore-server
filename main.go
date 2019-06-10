@@ -11,6 +11,7 @@ import (
 	_ "net/http/pprof"
 	"time"
 
+	"github.com/breml/bpfutils"
 	cmap "github.com/orcaman/concurrent-map"
 
 	"github.com/google/gopacket"
@@ -57,8 +58,9 @@ func main() {
 		}
 	} else {
 		localNetwork = *localNet
-		handle := initHandle(*deviceName)
-		go processPackets(handle)
+		// handle := initHandle(*deviceName)
+		afHandle := initAfPacket(*deviceName)
+		go processPackets(afHandle)
 
 		for {
 			fmt.Println("Listening for connections...")
@@ -93,32 +95,41 @@ func main() {
 }
 
 func initAfPacket(deviceName string) (handle *afpacket.TPacket) {
-	handle, _ = afpacket.NewTPacket(
+	if handle, err := afpacket.NewTPacket(
 		afpacket.OptInterface(deviceName),
-		afpacket.OptFrameSize(96)
-	)
-	
-	handle.SetBPFFilter("not (src net " + localNetwork + " and dst net " + localNetwork + ")")
-}
-
-func initHandle(deviceName string) (handle *pcap.Handle) {
-	if inactiveHandle, err := pcap.NewInactiveHandle(deviceName); err != nil {
+		afpacket.OptFrameSize(96),
+		afpacket.OptBlockSize(12288),
+		afpacket.OptNumBlocks(682),
+		afpacket.OptPollTimeout(pcap.BlockForever),
+		afpacket.SocketRaw,
+		afpacket.TPacketVersionHighestAvailable); err != nil {
 		panic(err)
 	} else {
-		defer inactiveHandle.CleanUp()
-		inactiveHandle.SetImmediateMode(true)
-		inactiveHandle.SetPromisc(true)
-		inactiveHandle.SetSnapLen(96)
-		if handle, err := inactiveHandle.Activate(); err != nil {
-			panic(err)
-		} else {
-			handle.SetBPFFilter("not (src net " + localNetwork + " and dst net " + localNetwork + ")")
-			return handle
-		}
+		filter, _ := pcap.CompileBPFFilter(layers.LinkTypeEthernet, 96, "not (src net "+localNetwork+" and dst net "+localNetwork+")")
+		raw := bpfutils.ToBpfRawInstructions(filter)
+		handle.SetBPF(raw)
+		return handle
 	}
 }
 
-func processPackets(handle *pcap.Handle) {
+// func initHandle(deviceName string) (handle *pcap.Handle) {
+// 	if inactiveHandle, err := pcap.NewInactiveHandle(deviceName); err != nil {
+// 		panic(err)
+// 	} else {
+// 		defer inactiveHandle.CleanUp()
+// 		inactiveHandle.SetImmediateMode(true)
+// 		inactiveHandle.SetPromisc(true)
+// 		inactiveHandle.SetSnapLen(96)
+// 		if handle, err := inactiveHandle.Activate(); err != nil {
+// 			panic(err)
+// 		} else {
+// 			handle.SetBPFFilter("not (src net " + localNetwork + " and dst net " + localNetwork + ")")
+// 			return handle
+// 		}
+// 	}
+// }
+
+func processPackets(handle *afpacket.TPacket) {
 	var (
 		eth  layers.Ethernet
 		ip4  layers.IPv4
